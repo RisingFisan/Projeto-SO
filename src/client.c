@@ -10,14 +10,22 @@
 ssize_t readline(int fd, char* buf, int size);
 
 int main(int argc, char const *argv[]) {
-    int fifo = open("./fifo", O_WRONLY);
+    int client_server_fifo = open("./client_server_fifo", O_WRONLY);
+    int server_client_fifo = open("./server_client_fifo", O_RDONLY);
     char string[1024];
     
     if(argc < 2) {
         char string[1024];
         int bytesRead = 0;
-        while((bytesRead = readline(STDIN_FILENO, string, 1024)) > 0) 
-            write(fifo, string, bytesRead);        
+        while((bytesRead = readline(STDIN_FILENO, string, 1024)) > 0) {
+            write(client_server_fifo, string, bytesRead);
+        
+            while(1) {
+                bytesRead = read(server_client_fifo, string, 1024);
+                write(STDOUT_FILENO, string, bytesRead);
+                if(bytesRead < 1024) break;
+            }
+        }
     }
     else {
         if(*argv[1] == '-') {
@@ -47,7 +55,11 @@ int main(int argc, char const *argv[]) {
                     sprintf(string, "output %s", argv[2]);
                     break;
             }
-            write(fifo, string, strlen(string));
+            write(client_server_fifo, string, strlen(string));
+        }
+        int bytesRead = 0;
+        while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
+            write(STDOUT_FILENO, string, bytesRead);
         }
     }
     return 0;
