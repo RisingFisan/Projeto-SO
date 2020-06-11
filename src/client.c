@@ -10,8 +10,8 @@
 ssize_t readline(int fd, char* buf, int size);
 
 int main(int argc, char const *argv[]) {
-    int client_server_fifo = open("./client_server_fifo", O_WRONLY);
-    int server_client_fifo = open("./server_client_fifo", O_RDONLY);
+    int client_server_fifo = open("/tmp/client_server_fifo", O_WRONLY);
+    int server_client_fifo = open("/tmp/server_client_fifo", O_RDONLY);
     char string[1024];
     
     if(argc < 2) {
@@ -58,8 +58,10 @@ int main(int argc, char const *argv[]) {
             write(client_server_fifo, string, strlen(string));
         }
         int bytesRead = 0;
-        while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
+        while(1) {
+            bytesRead = read(server_client_fifo, string, 1024);
             write(STDOUT_FILENO, string, bytesRead);
+            if(bytesRead < 1024) break;
         }
     }
     return 0;
