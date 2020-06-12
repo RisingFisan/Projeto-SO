@@ -13,4 +13,4 @@ server: server.o
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 clean:
-	rm -rf argus server *.o
+	rm -rf argus server *.o log*

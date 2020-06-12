@@ -16,36 +16,57 @@
 
 char* processes[1024];
 int exitStatus[1024];
-int pids[1024];
+int pids[1024][64];
+int numPids[1024];
 int lastProcess = 0;
 
 void strcpyandtrim(char* dest, char* src);
 
 void sigchld_handler(int sig) {
-    pid_t pid = wait(NULL);
+    int status;
+    pid_t pid = wait(&status);
     for(size_t i = 0; i < lastProcess; i++) {
-        if(exitStatus[i] == EXECUTING && pids[i] == pid) {
-            exitStatus[i] = FINISHED;
-            break;
+        if(pids[i][numPids[i] - 1] == pid) {
+            if(WIFSIGNALED(status)) {
+                if(WTERMSIG(status) == SIGTERM) {
+                    exitStatus[i] = TERMINATED;
+                    break;
+                }
+            }
+            else {
+                int log = open("log", O_RDONLY);
+                int logidx = open("log.idx", O_WRONLY | O_APPEND);
+                exitStatus[i] = FINISHED;
+                off_t end = lseek(log, 0, SEEK_END);
+                char message[64];
+                sprintf(message, "%020zu,%020ld;", i, end);
+                write(logidx, message, strlen(message));
+                break;
+            }
         }
     }
 }
 
+void sigterm_handler(int sig) {
+    pid_t pid = wait(NULL);
+}
+
 int main(int argc, char const *argv[]) {
-    mkfifo("/tmp/client_server_fifo", 0644);
-    mkfifo("/tmp/server_client_fifo", 0644);
+    mkfifo("client_server_fifo", 0644);
+    mkfifo("server_client_fifo", 0644);
 
     signal(SIGCHLD, sigchld_handler);
+    //signal(SIGTERM, sigterm_handler);
 
-    int client_server_fifo = open("/tmp/client_server_fifo", O_RDONLY);
-    int server_client_fifo = open("/tmp/server_client_fifo", O_WRONLY);
+    int client_server_fifo = open("client_server_fifo", O_RDONLY);
     int log = open("log", O_RDWR | O_CREAT | O_TRUNC, 0644);
     int logidx = open("log.idx", O_RDWR | O_CREAT | O_TRUNC, 0644);
-    ssize_t bytesRead = 0;
 
     while(1) {
         char* buffer = calloc(1024, sizeof(char));
-        int bytesRead = read(client_server_fifo, buffer, 1024);
+        size_t bytesRead = read(client_server_fifo, buffer, 1024);
+
+        int server_client_fifo = open("server_client_fifo", O_WRONLY);
 
         if(strncmp(buffer, "ajuda", 5) == 0) {
             char helpMessage[] = "tempo-inactividade TEMPO\n"
@@ -57,6 +78,7 @@ int main(int argc, char const *argv[]) {
                                 "ajuda\n"
                                 "output NUM_TAREFA\n";
             write(server_client_fifo, helpMessage, strlen(helpMessage));
+            close(server_client_fifo);
         }
         else if(strncmp(buffer, "executar", 8) == 0) {
             char* command = calloc(1024, sizeof(char));
@@ -69,70 +91,75 @@ int main(int argc, char const *argv[]) {
             sprintf(message, "nova tarefa #%d\n", lastProcess);
             write(server_client_fifo, message, strlen(message));
 
-            pid_t pid;
-            if((pid = fork()) == 0) {
-                int pipes[1024][2];
-                int currPipe = 0;
+            int pid;
+            int pipes[64][2];
+            int currPipe = 0;
 
-                char* token;
-                char* args[1000];
-                int i = 0;
-                while((token = strtok_r(command, " ", &command))) {
-                    if(i == 0) {
-                        args[0] = strdup(token);
-                        i++;
-                    }
+            char* token;
+            char* args[1000];
+            int i = 0;
+            while((token = strtok_r(command, " ", &command))) {
+                if(i == 0) {
+                    args[0] = strdup(token);
+                    i++;
+                }
 
-                    if(*token == '|') {
-                        pipe(pipes[currPipe]);
-                        args[i] = NULL;
-                        if(fork() == 0) {
-                            close(pipes[currPipe][0]);
-                            if(currPipe != 0) {
-                                dup2(pipes[currPipe - 1][0], STDIN_FILENO);
-                                close(pipes[currPipe - 1][0]);
-                            }
-                            dup2(pipes[currPipe][1], STDOUT_FILENO);
-                            close(pipes[currPipe][1]);
-                            execvp(args[0], args + 1);
+                if(*token == '|') {
+                    pipe(pipes[currPipe]);
+                    args[i] = NULL;
+                    if((pid = fork()) == 0) {
+                        close(pipes[currPipe][0]);
+                        if(currPipe != 0) {
+                            dup2(pipes[currPipe - 1][0], STDIN_FILENO);
+                            close(pipes[currPipe - 1][0]);
                         }
-                        else {
-                            i = 0;
-                        }
+                        dup2(pipes[currPipe][1], STDOUT_FILENO);
                         close(pipes[currPipe][1]);
-                        if(currPipe != 0) close(pipes[currPipe - 1][0]);
-                        currPipe++;
+                        execvp(args[0], args + 1);
                     }
                     else {
-                        args[i] = strdup(token);
-                        i++;
+                        pids[lastProcess][currPipe] = pid;
+                        i = 0;
                     }
+                    close(pipes[currPipe][1]);
+                    if(currPipe != 0) close(pipes[currPipe - 1][0]);
+                    currPipe++;
                 }
+                else {
+                    args[i] = strdup(token);
+                    i++;
+                }
+            }
 
-                args[i] = NULL;
-                if(fork() == 0) {
-                    dup2(log, STDOUT_FILENO);
-                    close(log);
-                    if(currPipe != 0) {
-                        dup2(pipes[currPipe - 1][0], STDIN_FILENO);
-                        close(pipes[currPipe - 1][0]);
-                    }
-                    execvp(args[0], args + 1);
+            args[i] = NULL;
+            if((pid = fork()) == 0) {
+                dup2(log, STDOUT_FILENO);
+                close(log);
+                if(currPipe != 0) {
+                    dup2(pipes[currPipe - 1][0], STDIN_FILENO);
+                    close(pipes[currPipe - 1][0]);
                 }
+                execvp(args[0], args + 1);
+            }
+            else pids[lastProcess][currPipe] = pid;
+            numPids[lastProcess] = currPipe + 1;
 
-                for(size_t j = 0; j <= currPipe; j++) {
-                    wait(NULL);
-                }
-                
-                off_t end = lseek(log, 0, SEEK_END);
-                sprintf(message, "%020d,%020d;", lastProcess, end);
-                write(logidx, message, strlen(message));
-                _exit(0);
+            lastProcess++;
+        }
+        else if(strncmp(buffer, "terminar", 8) == 0) {
+            long num = strtol(buffer + 9, NULL, 10);
+            if(num < lastProcess && exitStatus[num] == EXECUTING) {
+                for(size_t i = 0; pids[num][i] != 0; i++)
+                    kill(pids[num][i], SIGTERM);
+                char* message = strdup("tarefa terminada com sucesso\n");
+                write(server_client_fifo, message, strlen(message));
+                free(message);
             }
             else {
-                pids[lastProcess] = pid;    
+                char* message = strdup("tarefa não encontrada ou já terminada\n");
+                write(server_client_fifo, message, strlen(message));
+                free(message);
             }
-            lastProcess++;
         }
         else if(strncmp(buffer, "exit", 4) == 0) {
             break;
@@ -143,7 +170,7 @@ int main(int argc, char const *argv[]) {
             for(size_t i = 0; i < lastProcess; i++) {
                 if(exitStatus[i] == EXECUTING) {
                     empty = 0;
-                    sprintf(message, "#%zu: %s\n", i + 1, processes[i]);
+                    sprintf(message, "#%zu: %s\n", i, processes[i]);
                     write(server_client_fifo, message, strlen(message));
                 }
             }
@@ -173,7 +200,7 @@ int main(int argc, char const *argv[]) {
                         status = strdup("em execução");
                         break;
                 }
-                sprintf(message, "#%zu, %s: %s\n", i + 1, status, processes[i]);
+                sprintf(message, "#%zu, %s: %s\n", i, status, processes[i]);
                 write(server_client_fifo, message, strlen(message));
                 free(status);
             }
@@ -184,26 +211,39 @@ int main(int argc, char const *argv[]) {
         }
         else if(strncmp(buffer, "output", 6) == 0) {
             long num = strtol(buffer + 7, NULL, 10);
+
             lseek(logidx, 0, SEEK_SET);
+
             char buf[64];
             long start = 0, procNum = 0, end = 0;
+            int procExists = 0;
+
             while(read(logidx, buf, 42) > 0) {
                 sscanf(buf, "%ld,%ld;", &procNum, &end);
                 if(procNum == num) {
+                    procExists = 1;
                     long N = end - start;
-                    char output[N];
-                    lseek(log, start, SEEK_SET);
-                    read(log, output, N);
-                    write(server_client_fifo, output, N);
+                    if(N == 0) write(server_client_fifo, "\n", 1);
+                    else {
+                        char output[N];
+                        lseek(log, start, SEEK_SET);
+                        read(log, output, N);
+                        write(server_client_fifo, output, N);
+                    }
                     break;
                 }
                 start = end;
             }
+            if(!procExists) {
+                strcpy(buf, "tarefa não encontrada\n");
+                write(server_client_fifo, buf, strlen(buf));       
+            }
+            lseek(log, 0, SEEK_END);
         }
         else write(server_client_fifo, buffer, bytesRead);
 
         free(buffer);
-        //close(server_client_fifo);
+        close(server_client_fifo);
     }
     return 0;
 }
