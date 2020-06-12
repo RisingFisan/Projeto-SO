@@ -16,27 +16,26 @@
 
 char* processes[1024];
 int exitStatus[1024];
+char hasAlarm[1024];
 int pids[1024][64];
 int numPids[1024];
 int lastProcess = 0;
+int tExec = -1;
 
 void strcpyandtrim(char* dest, char* src);
+
+void terminate(int procNum);
 
 void sigchld_handler(int sig) {
     int status;
     pid_t pid = wait(&status);
     for(size_t i = 0; i < lastProcess; i++) {
         if(pids[i][numPids[i] - 1] == pid) {
-            if(WIFSIGNALED(status)) {
-                if(WTERMSIG(status) == SIGTERM) {
-                    exitStatus[i] = TERMINATED;
-                    break;
-                }
-            }
-            else {
+            if(!WIFSIGNALED(status)) {
                 int log = open("log", O_RDONLY);
                 int logidx = open("log.idx", O_WRONLY | O_APPEND);
                 exitStatus[i] = FINISHED;
+                hasAlarm[i] = 0;
                 off_t end = lseek(log, 0, SEEK_END);
                 char message[64];
                 sprintf(message, "%020zu,%020ld;", i, end);
@@ -47,8 +46,15 @@ void sigchld_handler(int sig) {
     }
 }
 
-void sigterm_handler(int sig) {
-    pid_t pid = wait(NULL);
+void sigalrm_handler(int sig) {
+    for(size_t i = 0; i < lastProcess; i++) {
+        if(hasAlarm[i]) {
+            terminate(i);
+            hasAlarm[i] = 0;
+            exitStatus[i] = TERMTEXEC;
+            break;
+        }
+    }
 }
 
 int main(int argc, char const *argv[]) {
@@ -56,7 +62,7 @@ int main(int argc, char const *argv[]) {
     mkfifo("server_client_fifo", 0644);
 
     signal(SIGCHLD, sigchld_handler);
-    //signal(SIGTERM, sigterm_handler);
+    signal(SIGALRM, sigalrm_handler);
 
     int client_server_fifo = open("client_server_fifo", O_RDONLY);
     int log = open("log", O_RDWR | O_CREAT | O_TRUNC, 0644);
@@ -98,6 +104,12 @@ int main(int argc, char const *argv[]) {
             char* token;
             char* args[1000];
             int i = 0;
+
+            if(tExec > 0) {
+                alarm(tExec);
+                hasAlarm[lastProcess] = 1;
+            }
+
             while((token = strtok_r(command, " ", &command))) {
                 if(i == 0) {
                     args[0] = strdup(token);
@@ -149,8 +161,9 @@ int main(int argc, char const *argv[]) {
         else if(strncmp(buffer, "terminar", 8) == 0) {
             long num = strtol(buffer + 9, NULL, 10);
             if(num < lastProcess && exitStatus[num] == EXECUTING) {
-                for(size_t i = 0; pids[num][i] != 0; i++)
-                    kill(pids[num][i], SIGTERM);
+                terminate(num);
+                exitStatus[num] = TERMINATED;
+                hasAlarm[num] = 0;
                 char* message = strdup("tarefa terminada com sucesso\n");
                 write(server_client_fifo, message, strlen(message));
                 free(message);
@@ -163,6 +176,18 @@ int main(int argc, char const *argv[]) {
         }
         else if(strncmp(buffer, "exit", 4) == 0) {
             break;
+        }
+        else if(strncmp(buffer, "tempo-execucao", 14) == 0) {
+            long time = strtol(buffer + 15, NULL, 10);
+            if(time > 0) {
+                tExec = time;
+                char message[] = "tempo definido com sucesso\n";
+                write(server_client_fifo, message, strlen(message));
+            }
+            else {
+                char message[] = "tempo inválido\n";
+                write(server_client_fifo, message, strlen(message));
+            }
         }
         else if(strncmp(buffer, "listar", 6) == 0) {
             char message[1024];
@@ -255,4 +280,9 @@ void strcpyandtrim(char* dest, char* src) {
     strcpy(dest, start);
     while(dest[strlen(dest) - 1] != '"') dest[strlen(dest) - 1] = '\0';
     dest[strlen(dest) - 1] = '\0';
+}
+
+void terminate(int procNum) {
+    for(size_t i = 0; pids[procNum][i] != 0; i++)
+        kill(pids[procNum][i], SIGTERM);
 }

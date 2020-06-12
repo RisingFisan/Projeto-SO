@@ -6,13 +6,20 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
 
 ssize_t readline(int fd, char* buf, int size);
+
+void sigchld_handler(int sig) {
+    wait(NULL);
+}
 
 int main(int argc, char const *argv[]) {
     int client_server_fifo = open("client_server_fifo", O_WRONLY);
     char string[1024];
     
+    signal(SIGCHLD, sigchld_handler);
+
     char stuck_on_write[] = "stuck on write\n";
     char stuck_on_read[] = "stuck on read\n";
 
@@ -20,12 +27,10 @@ int main(int argc, char const *argv[]) {
         char string[1024];
         int bytesRead = 0;
         while((bytesRead = readline(STDIN_FILENO, string, 1024)) > 0) {
-            //write(STDOUT_FILENO, stuck_on_write, strlen(stuck_on_write));
             write(client_server_fifo, string, bytesRead);
         
             if(fork() == 0) {
                 int server_client_fifo = open("server_client_fifo", O_RDONLY);
-                //write(STDOUT_FILENO, stuck_on_read, strlen(stuck_on_read));
                 while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
                     write(STDOUT_FILENO, string, bytesRead);
                 }
