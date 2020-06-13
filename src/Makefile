@@ -13,4 +13,4 @@ server: server.o
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 clean:
-	rm -rf argus server *.o log*
+	rm -rf argus server *.o log* server_client_fifo client_server_fifo

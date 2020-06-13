@@ -20,9 +20,6 @@ int main(int argc, char const *argv[]) {
     
     signal(SIGCHLD, sigchld_handler);
 
-    char stuck_on_write[] = "stuck on write\n";
-    char stuck_on_read[] = "stuck on read\n";
-
     if(argc < 2) {
         char string[1024];
         int bytesRead = 0;
