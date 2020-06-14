@@ -14,6 +14,8 @@
 #define TERMINACTIVE 3
 #define TERMTEXEC 4
 
+#define BUFSIZE 4096
+
 char* processes[1024];
 int exitStatus[1024];
 int execTimes[1024];
@@ -39,7 +41,7 @@ void sigchld_handler(int sig) {
                 exitStatus[i] = FINISHED;
                 off_t end = lseek(log, 0, SEEK_END);
                 char message[64];
-                sprintf(message, "%020zu,%020ld;", i, end);
+                sprintf(message, "%020zu,%020ld;", i+1, end);
                 write(logidx, message, strlen(message));
                 break;
             }
@@ -91,10 +93,10 @@ int main(int argc, char const *argv[]) {
     alarm(1);
 
     while(1) {
-        char* buffer = calloc(1024, sizeof(char));
+        char* buffer = calloc(BUFSIZE, sizeof(char));
         int client_server_fifo = open("client_server_fifo", O_RDONLY);
         int server_client_fifo = open("server_client_fifo", O_WRONLY);
-        size_t bytesRead = read(client_server_fifo, buffer, 1024);
+        size_t bytesRead = read(client_server_fifo, buffer, BUFSIZE);
 
         if(strncmp(buffer, "ajuda", 5) == 0) {
             char helpMessage[] = "tempo-inactividade TEMPO\n"
@@ -106,18 +108,18 @@ int main(int argc, char const *argv[]) {
                                 "ajuda\n"
                                 "output NUM_TAREFA\n";
             write(server_client_fifo, helpMessage, strlen(helpMessage));
-            close(server_client_fifo);
         }
         else if(strncmp(buffer, "executar", 8) == 0) {
-            char* command = calloc(1024, sizeof(char));
+            char* command = calloc(BUFSIZE, sizeof(char));
             strcpyandtrim(command, buffer + 9);
 
             processes[lastProcess] = strdup(command);
             exitStatus[lastProcess] = EXECUTING;
 
             char message[64];
-            sprintf(message, "nova tarefa #%d\n", lastProcess);
+            sprintf(message, "nova tarefa #%d\n", lastProcess + 1);
             write(server_client_fifo, message, strlen(message));
+            close(server_client_fifo);
 
             int pid;
             int pipes[32][2];
@@ -177,19 +179,24 @@ int main(int argc, char const *argv[]) {
             numPids[lastProcess] = currPipe + 1;
 
             lastProcess++;
+            free(command);
         }
         else if(strncmp(buffer, "terminar", 8) == 0) {
             long num = strtol(buffer + 9, NULL, 10);
-            if(num < lastProcess && exitStatus[num] == EXECUTING) {
-                terminate(num);
-                exitStatus[num] = TERMINATED;
-                char message[] = "tarefa terminada com sucesso\n";
-                write(server_client_fifo, message, strlen(message));
+            if(num > 0) {
+                num--;
+                if(num < lastProcess && exitStatus[num] == EXECUTING) {
+                    terminate(num);
+                    exitStatus[num] = TERMINATED;
+                    char message[] = "tarefa terminada com sucesso\n";
+                    write(server_client_fifo, message, strlen(message));
+                }
+                else {
+                    char message[] = "tarefa terminada com sucesso\n";
+                    write(server_client_fifo, message, strlen(message));
+                }
             }
-            else {
-                char message[] = "tarefa terminada com sucesso\n";
-                write(server_client_fifo, message, strlen(message));
-            }
+            else write(server_client_fifo, "input inválido\n", 16);
         }
         else if(strncmp(buffer, "exit", 4) == 0) {
             break;
@@ -224,7 +231,7 @@ int main(int argc, char const *argv[]) {
             for(size_t i = 0; i < lastProcess; i++) {
                 if(exitStatus[i] == EXECUTING) {
                     empty = 0;
-                    sprintf(message, "#%zu: %s\n", i, processes[i]);
+                    sprintf(message, "#%zu: %s\n", i+1, processes[i]);
                     write(server_client_fifo, message, strlen(message));
                 }
             }
@@ -254,7 +261,7 @@ int main(int argc, char const *argv[]) {
                         status = strdup("em execução");
                         break;
                 }
-                sprintf(message, "#%zu, %s: %s\n", i, status, processes[i]);
+                sprintf(message, "#%zu, %s: %s\n", i+1, status, processes[i]);
                 write(server_client_fifo, message, strlen(message));
                 free(status);
             }
@@ -266,35 +273,37 @@ int main(int argc, char const *argv[]) {
         else if(strncmp(buffer, "output", 6) == 0) {
             long num = strtol(buffer + 7, NULL, 10);
 
-            lseek(logidx, 0, SEEK_SET);
+            if(num > 0) {
+                lseek(logidx, 0, SEEK_SET);
 
-            char buf[64];
-            long start = 0, procNum = 0, end = 0;
-            int procExists = 0;
+                char buf[64];
+                long start = 0, procNum = 0, end = 0;
+                int procExists = 0;
 
-            while(read(logidx, buf, 42) > 0) {
-                sscanf(buf, "%ld,%ld;", &procNum, &end);
-                if(procNum == num) {
-                    procExists = 1;
-                    long N = end - start;
-                    if(N == 0) write(server_client_fifo, "tarefa não produziu output\n", 28);
-                    else {
-                        char output[N];
-                        lseek(log, start, SEEK_SET);
-                        read(log, output, N);
-                        write(server_client_fifo, output, N);
+                while(read(logidx, buf, 42) > 0) {
+                    sscanf(buf, "%ld,%ld;", &procNum, &end);
+                    if(procNum == num) {
+                        procExists = 1;
+                        long N = end - start;
+                        if(N == 0) write(server_client_fifo, "tarefa não produziu output\n", 28);
+                        else {
+                            char output[N];
+                            lseek(log, start, SEEK_SET);
+                            read(log, output, N);
+                            write(server_client_fifo, output, N);
+                        }
+                        break;
                     }
-                    break;
+                    start = end;
                 }
-                start = end;
+                if(!procExists) {
+                    strcpy(buf, "tarefa não encontrada\n");
+                    write(server_client_fifo, buf, strlen(buf));       
+                }
+                lseek(log, 0, SEEK_END);
             }
-            if(!procExists) {
-                strcpy(buf, "tarefa não encontrada\n");
-                write(server_client_fifo, buf, strlen(buf));       
-            }
-            lseek(log, 0, SEEK_END);
+            else write(server_client_fifo, "input inválido\n", 16);
         }
-        else write(server_client_fifo, buffer, bytesRead);
 
         free(buffer);
         close(server_client_fifo);

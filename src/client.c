@@ -1,34 +1,25 @@
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <signal.h>
-
-ssize_t readline(int fd, char* buf, int size);
 
 int main(int argc, char const *argv[]) {
-    int client_server_fifo = open("client_server_fifo", O_WRONLY);
-    int server_client_fifo = open("server_client_fifo", O_RDONLY);
     char string[1024];
 
     if(argc < 2) {
         char string[1024];
         int bytesRead = 0;
-        while((bytesRead = readline(STDIN_FILENO, string, 1024)) > 0) {
+        while((bytesRead = read(STDIN_FILENO, string, 1024)) > 0) {
+            if(string[bytesRead - 1] == '\n') string[--bytesRead] = 0;
+
+            int client_server_fifo = open("client_server_fifo", O_WRONLY);
+            int server_client_fifo = open("server_client_fifo", O_RDONLY);
             write(client_server_fifo, string, bytesRead);
-        
-            if(fork() == 0) {
-                while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
-                    write(STDOUT_FILENO, string, bytesRead);
-                }
-                close(server_client_fifo);
-                exit(0);
-            }
-            else waitpid(-1, NULL, WNOHANG);
+            close(client_server_fifo);
+
+            while((bytesRead = read(server_client_fifo, string, 1024)) > 0)
+                write(STDOUT_FILENO, string, bytesRead);
+            close(server_client_fifo);
         }
     }
     else {
@@ -59,26 +50,15 @@ int main(int argc, char const *argv[]) {
                     sprintf(string, "output %s", argv[2]);
                     break;
             }
+            int client_server_fifo = open("client_server_fifo", O_WRONLY);
             write(client_server_fifo, string, strlen(string));
+            close(client_server_fifo);
         }
         int bytesRead = 0;
-        if(fork() == 0) {
-            while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
-                write(STDOUT_FILENO, string, bytesRead);
-            }
-            close(server_client_fifo);
-            exit(0);
-        }
-        else waitpid(-1, NULL, WNOHANG);
+        int server_client_fifo = open("server_client_fifo", O_RDONLY);
+        while((bytesRead = read(server_client_fifo, string, 1024)) > 0)
+            write(STDOUT_FILENO, string, bytesRead);
+        close(server_client_fifo);
     }
-    close(client_server_fifo);
     return 0;
-}
-
-ssize_t readline(int fd, char* buf, int size) {
-    ssize_t bytesRead = read(fd, buf, size);
-    if(!bytesRead) return 0;
-
-    if(buf[bytesRead - 1] == '\n') buf[--bytesRead] = 0;
-    return bytesRead;
 }
