@@ -48,8 +48,6 @@
 	
 	O cliente e o servidor comunicam através de dois pipes com nome, um envia comandos do cliente para o servidor, e o outro envia o output dos comandos do servidor para o cliente.
 	
-	O nosso ficheiro de log, onde são armazenados os outputs das tarefas, é apagado sempre que o servidor é reiniciado. Decidimos fazer desta forma, mas seria muito simples fazer de outra forma, apenas fizemos assim por escolha e porque o enunciado não referia que método tínhamos que usar.
-	
 	\chapter{Funcionalidades disponíveis no servidor}
 	\section{Ajuda}
 	Este é o comando mais simples, que apenas envia para o cliente uma lista de todos os comandos existentes e de como os deve usar.
@@ -73,13 +71,17 @@
 	Este comando permite-nos definir um tempo máximo durante o qual cada tarefa pode correr antes de ser terminada à força. O programa guarda numa lista o tempo de execução de cada tarefa, e a cada segundo verifica, caso a tarefa ainda esteja em execução, se esse tempo é superior ao tempo máximo de execução. Em caso afirmativo, essa tarefa é terminado pelo mesmo método do comando \emph{terminar} e o seu estado atualizado. Caso não seja, o tempo de execução dessa tarefa é incrementado em um segundo. Esta sistema funciona usando a função \emph{alarm}, que é chamada uma vez por segundo, e faz essa verificação.
 	
 	\section{Tempo de inatividade}
-	Ao dar a flag \emph{O_ASYNC} aos pipes de comunicação dos comandos, estes enviam um sinal (\emph{SIGIO}) quando passa informação por eles. Desta forma, somos capazes de saber quando é que houve comunicação num pipe anónimo. Este comando usa o mesmo método de medição de tempo que o comando \emph{tempo-execucao}, mas este apenas interrompe uma tarefa se não tiver havido comunicação nos pipes dessa tarefa. O comando sabe isso através de uma variável que passa a ser zero sempre que há comunicação num dos pipes da tarefa, e que é incrementada a cada segundo. Desta forma, se chegar ao valor do tempo de inatividade, é porque não houve atividade durante aquele tempo.
+	Ao dar a flag \emph{O\_ASYNC} aos pipes de comunicação das tarefas, estes enviam um sinal (\emph{SIGIO}) quando passa informação por eles. Desta forma, somos capazes de saber quando é que houve comunicação num pipe anónimo. Este comando usa o mesmo método de medição de tempo que o comando \emph{tempo-execucao}, mas este apenas interrompe uma tarefa se não tiver havido comunicação nos pipes dessa tarefa. O comando sabe isso através de uma variável que passa a ser zero sempre que há comunicação num dos pipes da tarefa, e que é incrementada a cada segundo. Desta forma, se chegar ao valor do tempo de inatividade, é porque não houve atividade durante aquele tempo.
 		
+	\chapter{Decisões tomadas}
 	
+	O nosso ficheiro de log, onde são armazenados os outputs das tarefas, é apagado sempre que o servidor é reiniciado. Decidimos fazer desta forma, mas seria muito simples fazer de outra forma, apenas fizemos assim por escolha e porque o enunciado não referia que método tínhamos que usar. Desta forma, cada execução do servidor irá produzir um novo ficheiro de log.
+	
+	Decidimos que o nosso servidor suporta a execução de até 2048 tarefas. Podíamos ter usado alocação dinâmica de memória para suportar a execução de mais tarefas, mas sentimos que não seria necessário, já que, tendo em conta a simplicidade do programa, seria quase inconcebível executar mais que algumas centenas de tarefas, o histórico seria demasiado grande. Num projeto de mais larga escala, com um histórico navegável por páginas, por exemplo, isso já seria algo que implementaríamos.
 
 	\chapter{Conclusão}
 	
-	Como é possível constatar, o nosso trabalho possui todas as funcionalidades pedidas a funcionar perfeitamente, para além da funcionalidade adicional. Desta forma, acreditamos que o nosso trabalho está bem conseguido.
+	Como é possível constatar, o nosso trabalho possui todas as funcionalidades pedidas a funcionar perfeitamente, para além da funcionalidade adicional. Desta forma, acreditamos que o nosso trabalho está bem conseguido. Tal como referimos no capítulo anterior, podíamos ter feito algumas coisas de forma diferente, mas da forma que fizemos funciona tudo bem.
 
 
 \end{document}
