@@ -44,35 +44,42 @@
 	Este projeto consistiu na criação de um serviço de execução de tarefas, no qual um cliente é capaz de enviar sucessivas tarefas a um servidor, para este as executar.
 	Para além de executar tarefas, o servidor permite consultar tarefas em execução ou executadas previamente, consultar o output de cada tarefa, terminar manualmente tarefas, e ainda definir um tempo máximo de execução de cada tarefa ou tempo máximo de comunicação entre pipes.
 	
-	Numa fase inicial, o maior desafio foi encontrar uma forma de poder encadear um número arbitrário de comandos sucessivos. Mais tarde, também tivemos alguma dificuldade em conseguir obter o estado de um comando, mas acabámos por conseguir superar estes obstáculos.
+	Numa fase inicial, o maior desafio foi encontrar uma forma de poder encadear um número arbitrário de comandos sucessivos. Mais tarde, também tivemos alguma dificuldade em conseguir obter o estado de uma tarefa, mas acabámos por conseguir superar estes obstáculos.
 	
 	O cliente e o servidor comunicam através de dois pipes com nome, um envia comandos do cliente para o servidor, e o outro envia o output dos comandos do servidor para o cliente.
 	
-	\chapter{Comandos disponíveis no servidor}
+	O nosso ficheiro de log, onde são armazenados os outputs das tarefas, é apagado sempre que o servidor é reiniciado. Decidimos fazer desta forma, mas seria muito simples fazer de outra forma, apenas fizemos assim por escolha e porque o enunciado não referia que método tínhamos que usar.
+	
+	\chapter{Funcionalidades disponíveis no servidor}
 	\section{Ajuda}
 	Este é o comando mais simples, que apenas envia para o cliente uma lista de todos os comandos existentes e de como os deve usar.
 	
 	\section{Executar}
-	Comando central do servidor, permite executar uma ou mais funções encadeadas, enviando para um ficheiro \emph{log} o seu output. Neste comando usamos um ou mais \emph{execvp}, após fazer \textit{parsing} do input, para executar cada função fornecida. Estas funções comunicam entre si através de pipes anónimos. Como não sabemos de quantos pipes um comando irá precisar antes de terminar o \textit{parsing} total do input, por uma questão de eficiência, decidimos dar a cada execução do comando 32 pipes anónimos. Podíamos também ter usado alocação dinâmica de memória, para por um lado evitar usar memória desnecessariamente e por outro permitir a execução de comandos com mais de 32 pipes, mas acreditamos que, para além de que o número atual de pipes que temos não ter um grande peso em termos de memória, 32 já é um número mais que suficiente de pipes para um comando.
+	Comando central do servidor, permite executar uma ou mais funções encadeadas, enviando para um ficheiro \emph{log} o seu output. Neste comando usamos um ou mais \emph{execvp}, após fazer \textit{parsing} do input, para executar cada função fornecida. Estas funções comunicam entre si através de pipes anónimos. Como não sabemos de quantos pipes uma tarefa irá precisar antes de terminar o \textit{parsing} total do input, por uma questão de eficiência, decidimos dar a cada tarefa 32 pipes anónimos. Podíamos também ter usado alocação dinâmica de memória, para por um lado evitar usar memória desnecessariamente e por outro permitir a execução de comandos com mais de 32 pipes, mas acreditamos que, para além de que o número atual de pipes que temos não ter um grande peso em termos de memória, 32 já é um número mais que suficiente de pipes para uma tarefa.
 
 	\section{Histórico}
-	O servidor contém duas listas, uma que contém todos os comandos executados até ao momento, e outra que contém o estado da execução de cada comando. Este estado pode ser: em execução; concluído; terminado manualmente; terminado por tempo de execução; terminado por inatividade. O comando \emph{historico} envia para o cliente uma lista contendo a informação destas duas listas.
+	O servidor contém duas listas, uma que contém todas as tarefas executadas até ao momento, e outra que contém o estado da execução de cada tarefa. Este estado pode ser: em execução; concluída; terminada manualmente; terminada por tempo de execução; terminada por inatividade. O comando \emph{historico} envia para o cliente uma lista contendo a informação destas duas listas.
 	
 	\section{Listar}
-	Este comando é uma versão mais simples do comando \emph{historico}, apenas envia para o cliente os comandos do histórico que ainda estejam em execução.
+	Este comando é uma versão mais simples do comando \emph{historico}, apenas envia para o cliente as tarefas do histórico que ainda estejam em execução.
 	
 	\section{Output}
-	Todos os comandos que terminam normalmente escrevem o seu output no ficheiro \emph{log}, e é guardado no ficheiro \emph{log.idx}, associado ao número do comando, a posição do byte final do output no \emph{log}. O comando \emph{output} lê o ficheiro \emph{log} e envia para o cliente o output do comando especificado, começando a ler a partir do fim do output do comando anterior (posição 0 caso seja o primeiro comando) até à posição indicada no ficheiro \emph{log.idx}. Com este sistema apenas temos que armazenar o número do comando e uma posição num ficheiro auxiliar
+	Todas as tarefas que terminam normalmente escrevem o seu output no ficheiro \emph{log}, e é guardado no ficheiro \emph{log.idx}, associada ao número da tarefa, a posição do byte final do output no \emph{log}. O comando \emph{output} lê o ficheiro \emph{log} e envia para o cliente o output da tarefa especificada, começando a ler a partir do fim do output da tarefa anterior (posição 0 caso seja a primeira tarefa) até à posição indicada no ficheiro \emph{log.idx}. Com este sistema apenas temos que armazenar o número da tarefa e uma posição num ficheiro auxiliar.
 	
 	\section{Terminar}
-	Como um comando pode gerar vários processos filhos, é necessário guardar os pids de todos eles, para os podermos terminar. Para isso usamos uma lista, que o comando \emph{terminar} percorre, e para cada pid de um processo filho de um dado comando usa a função \emph{kill} para o terminar, usando o sinal \emph{SIGTERM}.
+	Como uma tarefa pode gerar vários processos filhos, é necessário guardar os pids de todos eles, para os podermos terminar. Para isso usamos uma lista, que o comando \emph{terminar} percorre, e para cada pid de um processo filho de uma dada tarefa usa a função \emph{kill} para o terminar, usando o sinal \emph{SIGTERM}.
 	
 	\section{Tempo de execução}
-	Este comando permite-nos definir um tempo máximo durante o qual cada comando pode correr antes de ser terminado à força. O programa guarda numa lista o tempo de execução de cada comando, e a cada segundo verifica, caso o comando ainda esteja em execução, se esse tempo é superior ao tempo máximo de execução. Em caso afirmativo, esse comando é terminado pelo mesmo método do comando \emph{terminar} e o seu estado atualizado. Caso não seja, o tempo de execução desse programa é incrementado em um segundo. Esta sistema funciona usando a função \emph{alarm}, que é chamada uma vez por segundo, e faz essa verificação.
+	Este comando permite-nos definir um tempo máximo durante o qual cada tarefa pode correr antes de ser terminada à força. O programa guarda numa lista o tempo de execução de cada tarefa, e a cada segundo verifica, caso a tarefa ainda esteja em execução, se esse tempo é superior ao tempo máximo de execução. Em caso afirmativo, essa tarefa é terminado pelo mesmo método do comando \emph{terminar} e o seu estado atualizado. Caso não seja, o tempo de execução dessa tarefa é incrementado em um segundo. Esta sistema funciona usando a função \emph{alarm}, que é chamada uma vez por segundo, e faz essa verificação.
+	
+	\section{Tempo de inatividade}
+	Ao dar a flag \emph{O_ASYNC} aos pipes de comunicação dos comandos, estes enviam um sinal (\emph{SIGIO}) quando passa informação por eles. Desta forma, somos capazes de saber quando é que houve comunicação num pipe anónimo. Este comando usa o mesmo método de medição de tempo que o comando \emph{tempo-execucao}, mas este apenas interrompe uma tarefa se não tiver havido comunicação nos pipes dessa tarefa. O comando sabe isso através de uma variável que passa a ser zero sempre que há comunicação num dos pipes da tarefa, e que é incrementada a cada segundo. Desta forma, se chegar ao valor do tempo de inatividade, é porque não houve atividade durante aquele tempo.
 		
 	
 
 	\chapter{Conclusão}
+	
+	Como é possível constatar, o nosso trabalho possui todas as funcionalidades pedidas a funcionar perfeitamente, para além da funcionalidade adicional. Desta forma, acreditamos que o nosso trabalho está bem conseguido.
 
 
 \end{document}
