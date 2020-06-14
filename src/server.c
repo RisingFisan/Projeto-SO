@@ -17,7 +17,7 @@
 char* processes[1024];
 int exitStatus[1024];
 int execTimes[1024];
-char hasComm[1024][32];
+char commTimes[1024];
 int pids[1024][32];
 int numPids[1024];
 int lastProcess = 0;
@@ -49,40 +49,28 @@ void sigchld_handler(int sig) {
 
 void sigalrm_handler(int sig) {
     for(size_t procNum = 0; procNum < lastProcess; procNum++) {
-        if(tExec > 0 && exitStatus[procNum] == EXECUTING) {
+        if(exitStatus[procNum] == EXECUTING) {
             execTimes[procNum]++;
-            if(execTimes[procNum] >= tExec) {
+            commTimes[procNum]++;
+            if(tExec > 0 && execTimes[procNum] >= tExec) {
                 terminate(procNum);
                 exitStatus[procNum] = TERMTEXEC;
+            }
+            else if(tInac > 0 && commTimes[procNum] >= tInac) {
+                terminate(procNum);
+                exitStatus[procNum] = TERMINACTIVE;
             }
         }
     }
     alarm(1);
-
-    // else {
-    //     puts("B");
-    //     for(size_t i = 0; i < lastProcess; i++) {
-    //         for(size_t j = 0; j < numPids[i] - 1; j++) {
-    //             if(pid == pids[i][j]) {
-    //                 if(!hasComm[i][j]) {
-    //                     terminate(i);
-    //                     hasAlarm[i] = 0;
-    //                     exitStatus[i] = TERMINACTIVE;
-    //                     return;
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 void sigio_handler(int sig) {
     int pid = getpid();
-    puts("Y");
     for(size_t i = 0; i < lastProcess; i++) {
         for(size_t j = 0; j < numPids[i] - 1; j++) {
             if(pid == pids[i][j]) {
-                hasComm[i][j] = 1;
+                commTimes[i] = 0;
                 return;
             }
         }
@@ -97,9 +85,6 @@ int main(int argc, char const *argv[]) {
     signal(SIGALRM, sigalrm_handler);
     signal(SIGIO, sigio_handler);
 
-    //sigprocmask(SIG_UNBLOCK, SIGIO, NULL);
-
-    int client_server_fifo = open("client_server_fifo", O_RDONLY);
     int log = open("log", O_RDWR | O_CREAT | O_TRUNC, 0644);
     int logidx = open("log.idx", O_RDWR | O_CREAT | O_TRUNC, 0644);
 
@@ -107,9 +92,9 @@ int main(int argc, char const *argv[]) {
 
     while(1) {
         char* buffer = calloc(1024, sizeof(char));
-        size_t bytesRead = read(client_server_fifo, buffer, 1024);
-
+        int client_server_fifo = open("client_server_fifo", O_RDONLY);
         int server_client_fifo = open("server_client_fifo", O_WRONLY);
+        size_t bytesRead = read(client_server_fifo, buffer, 1024);
 
         if(strncmp(buffer, "ajuda", 5) == 0) {
             char helpMessage[] = "tempo-inactividade TEMPO\n"
@@ -150,9 +135,8 @@ int main(int argc, char const *argv[]) {
 
                 if(*token == '|') {
                     pipe(pipes[currPipe]);
-                    fcntl(STDOUT_FILENO, F_SETFL, O_ASYNC);
-                    fcntl(pipes[currPipe][0], F_SETFL, O_ASYNC);
-                    fcntl(pipes[currPipe][1], F_SETFL, O_ASYNC);
+                    fcntl(pipes[currPipe][0], __F_SETOWN, getpid());
+                    fcntl(pipes[currPipe][0], F_SETFL, O_ASYNC | O_RDONLY);
 
                     args[i] = NULL;
                     if((pid = fork()) == 0) {
@@ -199,14 +183,12 @@ int main(int argc, char const *argv[]) {
             if(num < lastProcess && exitStatus[num] == EXECUTING) {
                 terminate(num);
                 exitStatus[num] = TERMINATED;
-                char* message = strdup("tarefa terminada com sucesso\n");
+                char message[] = "tarefa terminada com sucesso\n";
                 write(server_client_fifo, message, strlen(message));
-                free(message);
             }
             else {
-                char* message = strdup("tarefa não encontrada ou já terminada\n");
+                char message[] = "tarefa terminada com sucesso\n";
                 write(server_client_fifo, message, strlen(message));
-                free(message);
             }
         }
         else if(strncmp(buffer, "exit", 4) == 0) {
@@ -295,7 +277,7 @@ int main(int argc, char const *argv[]) {
                 if(procNum == num) {
                     procExists = 1;
                     long N = end - start;
-                    if(N == 0) write(server_client_fifo, "\n", 1);
+                    if(N == 0) write(server_client_fifo, "tarefa não produziu output\n", 28);
                     else {
                         char output[N];
                         lseek(log, start, SEEK_SET);
@@ -316,6 +298,7 @@ int main(int argc, char const *argv[]) {
 
         free(buffer);
         close(server_client_fifo);
+        close(client_server_fifo);
     }
     return 0;
 }

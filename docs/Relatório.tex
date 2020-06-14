@@ -55,125 +55,24 @@
 	\section{Executar}
 	Comando central do servidor, permite executar uma ou mais funções encadeadas, enviando para um ficheiro \emph{log} o seu output. Neste comando usamos um ou mais \emph{execvp}, após fazer \textit{parsing} do input, para executar cada função fornecida. Estas funções comunicam entre si através de pipes anónimos. Como não sabemos de quantos pipes um comando irá precisar antes de terminar o \textit{parsing} total do input, por uma questão de eficiência, decidimos dar a cada execução do comando 32 pipes anónimos. Podíamos também ter usado alocação dinâmica de memória, para por um lado evitar usar memória desnecessariamente e por outro permitir a execução de comandos com mais de 32 pipes, mas acreditamos que, para além de que o número atual de pipes que temos não ter um grande peso em termos de memória, 32 já é um número mais que suficiente de pipes para um comando.
 
-	\section{Historico}
+	\section{Histórico}
 	O servidor contém duas listas, uma que contém todos os comandos executados até ao momento, e outra que contém o estado da execução de cada comando. Este estado pode ser: em execução; concluído; terminado manualmente; terminado por tempo de execução; terminado por inatividade. O comando \emph{historico} envia para o cliente uma lista contendo a informação destas duas listas.
 	
 	\section{Listar}
 	Este comando é uma versão mais simples do comando \emph{historico}, apenas envia para o cliente os comandos do histórico que ainda estejam em execução.
 	
 	\section{Output}
-	Todos os comandos que terminam normalmente escrevem o seu output no ficheiro \emph{log}, e é guardado no ficheiro \emph{log.idx}, associado ao número do comando, a posição do byte final do output no \emph{log}.
+	Todos os comandos que terminam normalmente escrevem o seu output no ficheiro \emph{log}, e é guardado no ficheiro \emph{log.idx}, associado ao número do comando, a posição do byte final do output no \emph{log}. O comando \emph{output} lê o ficheiro \emph{log} e envia para o cliente o output do comando especificado, começando a ler a partir do fim do output do comando anterior (posição 0 caso seja o primeiro comando) até à posição indicada no ficheiro \emph{log.idx}. Com este sistema apenas temos que armazenar o número do comando e uma posição num ficheiro auxiliar
 	
-	\section{Estruturas auxiliares (AuxStructs)}
-	Para poder responder às queries de forma eficiente definimos três estruturas de dados para armazenar os resultados das queries, quando estes são demasiado complexos para armazenar num tipo de dados simples. Temos assim as estruturas StringArray, SalesProfit e ProductTable, defjnidas da seguinte forma:
-	\begin{lstlisting}[language=C]
-struct stringArray {
-	char **array;
-	size_t N;
-	int data;
-};
-
-struct salesProfit {
-	int sales[3][2];
-	double profit[3][2];
-};
-
-struct productTable {
-	int totalQuant[3][12];
-};
-	\end{lstlisting}
-	A API associada a este módulo permite realizar operações de inserção e consulta de dados nas três estruturas.
+	\section{Terminar}
+	Como um comando pode gerar vários processos filhos, é necessário guardar os pids de todos eles, para os podermos terminar. Para isso usamos uma lista, que o comando \emph{terminar} percorre, e para cada pid de um processo filho de um dado comando usa a função \emph{kill} para o terminar, usando o sinal \emph{SIGTERM}.
+	
+	\section{Tempo de execução}
+	Este comando permite-nos definir um tempo máximo durante o qual cada comando pode correr antes de ser terminado à força. O programa guarda numa lista o tempo de execução de cada comando, e a cada segundo verifica, caso o comando ainda esteja em execução, se esse tempo é superior ao tempo máximo de execução. Em caso afirmativo, esse comando é terminado pelo mesmo método do comando \emph{terminar} e o seu estado atualizado. Caso não seja, o tempo de execução desse programa é incrementado em um segundo. Esta sistema funciona usando a função \emph{alarm}, que é chamada uma vez por segundo, e faz essa verificação.
 		
-	\section{UI}
-	O módulo UI, tal como o nome indica, trata da parte visual do programa, como mostrar ao utilizador os resultados das queries, os menus do programa, e os \textit{input prompts}. A sua API contém \textit{macros} para poder imprimir texto colorido no terminal.
 	
-	\section{Navegador (Navigator)}
-	Este módulo permite navegar pela estrutura StringArray, mostrando a sua informação ao utilizador pelo módulo UI de forma organizada, por páginas. A navegação pelas outras estruturas devolvidas pelas queries fica ao encargo do próximo módulo, pois são simples o suficiente para não ser necessário recorrer a outro módulo para as navegar.
-	
-	\section{Queries}
-	O módulo Queries é o responsável pelo fluxo das queries, ou seja, é o que trata de receber \textit{input} do utilizador, chamar a função da query correspondente, fornecendo-lhe o \textit{input} necessário, e enviar o \textit{output} para o módulo UI, para poder ser apresentado ao utilizador. Para além das queries, este módulo tem ainda uma função que realiza um \textit{benchmark}, medindo o tempo de execução de todas as queries, uma por uma.
-	
-	\section{Controlador (Controller)}
-	Por último, o módulo Controlador é o módulo principal, é este que controla o fluxo do programa. É este módulo que diz ao módulo Queries que query o utilizador escolheu, e que manda libertar a memória alocada ao SGV ao sair do programa. Os módulos Queries e Navegador são "sub-módulos" deste módulo.
-	
-	\chapter{Estrutura do projeto}
-	
-	O nosso projeto segue a estrutura \textit{Model View Controller} (MVC), estando por isso organizado em três camadas:
-	\begin{itemize}
-		\item A camada de dados (o modelo) é composta pelo SGV/Interface, que por sua vez é constituído pelos módulos referidos no capítulo anterior, Clientes, Produtos, Faturas, Filial e FileInfo. Para além destes, temos ainda as estruturas auxiliares definidas nos módulos AuxStructs e Venda.
-		\item A camada de interação com o utilizador (a vista, ou apresentação) é composta unicamente pelo módulo UI.
-		\item A camada de controlo do fluxo do programa (o controlador) é composta pelos módulos Controlador, Queries e Navegador. É esta camada que gere o funcionamento do programa, interagindo com as outras duas camadas para que este possa funcionar da forma pretendida. As outras duas camadas nunca interagem diretamente uma com a outra.
-	\end{itemize}
-	Nesta estrutura, o controlador é responsável por enviar pedidos ao modelo, como por exemplo responder a uma query. O modelo calcula essa resposta e envia-a ao controlador, que irá pedir à vista para a apresentar ao utilizador. Temos assim três camadas distintas que funcionam juntas para formar o nosso programa.
-
-	\chapter{Complexidade das estruturas}
-	
-	Para as estruturas mais complexas, responsáveis por armazenar grandes quantidades de dados, decidimos usar tabelas de hash, com duas exceções. Usámos árvores binárias em vez de tabelas de hash para armazenar os catálogos de clientes e de produtos pois com árvores binárias conseguimos percorrer os seus elementos por ordem (neste caso alfabética), permitindo-nos assim devolver facilmente listas de clientes ou de produtos ordenadas alfabeticamente como resposta a algumas queries, que devem ter como resultado uma lista ordenada, sem ser preciso ordenar a lista.
-	
-	Também tentámos reduzir ao máximo o número de estruturas diferentes usadas para guardar os resultados das queries. Acabámos por ter que definir apenas três.\\
-	\indent
-	A primeira (StringArray) contém, como o nome indica, um array de strings, com um comprimento N, e um valor auxiliar \textbf{data} que armazena informação pertinente para responder a algumas das queries. Por exemplo, na query 2, este valor contém a letra pela qual os produtos da lista devem começar, e na query 11 contém a quantidade de produtos que pretendemos encontrar, ou seja, o comprimento final que a lista deve ter. Através do módulo Navegador, somos capazes de percorrer esta estrutura por páginas.\\
-	\indent
-	A segunda (SalesProfit) contém duas listas, uma para armazenar o número total de vendas, e outra para armazenar o lucro total. Estes valores podem ser divididos por filial ou por modo de compra (em promoção ou não). Dividimos a estrutura em duas listas pois o total de vendas é um valor inteiro e o lucro total é um valor de vírgula flutuante, logo não podem estar armazenados na mesma lista.\\
-	\indent
-	A terceira e última estrutura (ProductTable) é responsável por armazenar a quantidade total de um produto que foi vendida, estando dividida por mês e por filial. Esta estrutura apenas consiste numa lista bidimensional (uma matriz, por outras palavras), e não era necessário ter criado esta estrutura, podíamos simplesmente ter trabalhado com a lista que esta contém, mas como em C uma lista multidimensional devolvida por uma função "decai" para um apontador para uma lista unidimensional, seria muito mais complicado obter os valores da nossa lista depois da query a devolver. Desta forma não temos esse problema.
-	
-	\chapter{Testes de desempenho}
-	
-	Para medir o tempo de execução do nosso programa usámos a biblioteca \emph{time.h}. Fizemos várias medições, e podemos ver o resultado de uma dessas medições
-	na tabela da figura a seguir.
-
-	Poderíamos ter calculado o tempo médio de várias medições, mas não sentimos a necessidade de o fazer, visto que os resultados que obtivemos diferiram
-	muito pouco uns dos outros, a única diferença "considerável" registou-se na primeira query, mas nunca foi superior a 0,2s.
-	
-	Decidimos não incluir a query 13 neste \textit{benchmark} porque esta apenas vai buscar dados ao SGV,
-	e o seu tempo de execução é sempre praticamente nulo.
-
-	Pela análise da tabela, podemos concluir o seguinte:
-	\begin{itemize}
-
-		\item todas as queries, exceto a query 1 e a query 11, têm um tempo de execução bastante baixo, 
-		nunca ultrapassando os 0,1 segundos. Sem contar com a query 1, a query 11 é a mais lenta, visto
-		que tem que percorrer todas as filiais e ordenar todos os produtos vendidos em função da quantidade
-		vendida, mas mesmo assim consegue fazê-lo num tempo aceitável.
-
-		\item o aumento do número de vendas lidas leva a um aumento do tempo de execução de algumas queries,
-		mais especificamente aquelas que interagem com os módulos de faturação e das filiais.
-
-		\item este aumento faz-se sentir com mais força na query 1, onde a complexidade de tempo aparenta
-		ser linear, ou próxima de linear. As queries 10 e 11 também apresentam algum aumento no tempo
-		de execução, mas aqui a complexidade já é inferior a linear.
-
-		\item em queries que apenas vão buscar informação aos catálogos de produtos e clientes, como as
-		queries 2, 3 e 8, o número de vendas não parece afetar o seu tempo de execução, como seria de esperar.
-		Pode-se atribuir a pequena variação registada a erros estatísticos.
-		A query 5 apresenta um ligeiro aumento no tempo de execução, mas este aumento é causado pelo facto
-		de que a lista que a query devolve ser maior, dado que com mais vendas há mais clientes a comprar 
-		em todas as filiais, logo haverá mais alocações de memória, que acabam por também ter um peso
-		no tempo de execução.
-		
-	\end{itemize}
-
-	Para além de testes de tempo de execução, também realizámos testes de memória, usando a ferramenta
-	\emph{Valgrind}. Concluímos que o único tipo de \textit{memory leaks} presentes no nosso programa
-	se devem às estruturas de dados do GLib utilizadas, e que são do tipo "still reachable", e portanto
-	não são "graves"\href{https://valgrind.org/docs/manual/faq.html#faq.deflost}{[1]}. Para além disso,
-	usando a ferramenta \emph{memcheck}, verificámos que o nosso SGV ocupa um tamanho máximo na heap 
-	de cerca de	398,74 MB.
 
 	\chapter{Conclusão}
 
-	A nível geral, e tendo em conta o que foi explicado nos capítulos anteriores, podemos afirmar que temos um
-	projeto bem conseguido. As estruturas de dados implementadas possuem um acesso eficiente à informação
-	guardada, o que permite que os tempos de resposta das queries sejam bastante curtos. Mesmo a query 11,
-	a que demora mais tempo a gerar uma resposta, consegue fazê-lo em menos de um segundo para um milhão de
-	vendas, e para três milhões de vendas num computador moderno. Para além disso, é possível verificar que
-	não existe uma grande perda de performance com o aumento do tamanho do ficheiro	de vendas. Conseguimos
-	com que o nosso programa não só fosse eficiente, como também que o seu desempenho se
-	mantivesse aceitável em diferentes cenários, que era um dos principais desafios deste projeto.
-
-	Sentimos que as nossas estruturas e funções, apesar de funcionarem bem e serem eficiente, poderiam
-	ser um pouco mais simples, da forma como estão atualmente podem parecer um bocado confusas para alguém
-	que não tenha lido este relatório, o que não é ideal, especialmente no mundo profissional.
 
 \end{document}

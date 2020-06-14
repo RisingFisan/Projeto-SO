@@ -10,15 +10,10 @@
 
 ssize_t readline(int fd, char* buf, int size);
 
-void sigchld_handler(int sig) {
-    wait(NULL);
-}
-
 int main(int argc, char const *argv[]) {
     int client_server_fifo = open("client_server_fifo", O_WRONLY);
+    int server_client_fifo = open("server_client_fifo", O_RDONLY);
     char string[1024];
-    
-    signal(SIGCHLD, sigchld_handler);
 
     if(argc < 2) {
         char string[1024];
@@ -27,13 +22,13 @@ int main(int argc, char const *argv[]) {
             write(client_server_fifo, string, bytesRead);
         
             if(fork() == 0) {
-                int server_client_fifo = open("server_client_fifo", O_RDONLY);
                 while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
                     write(STDOUT_FILENO, string, bytesRead);
                 }
                 close(server_client_fifo);
                 exit(0);
             }
+            else waitpid(-1, NULL, WNOHANG);
         }
     }
     else {
@@ -67,12 +62,16 @@ int main(int argc, char const *argv[]) {
             write(client_server_fifo, string, strlen(string));
         }
         int bytesRead = 0;
-        int server_client_fifo = open("server_client_fifo", O_RDONLY);
-        while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
-            write(STDOUT_FILENO, string, bytesRead);
+        if(fork() == 0) {
+            while((bytesRead = read(server_client_fifo, string, 1024)) > 0) {
+                write(STDOUT_FILENO, string, bytesRead);
+            }
+            close(server_client_fifo);
+            exit(0);
         }
-        close(server_client_fifo);
+        else waitpid(-1, NULL, WNOHANG);
     }
+    close(client_server_fifo);
     return 0;
 }
 
