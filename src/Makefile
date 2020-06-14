@@ -1,16 +1,16 @@
 CC = gcc
 CFLAGS = -O2 -Wall
 
-all: argus server
+all: argus argusd
 
-argus: client.o
+argus: argus.o
 	$(CC) -o $@ $<
 
-server: server.o
+argusd: argusd.o
 	$(CC) -o $@ $<
 
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 clean:
-	rm -rf argus server *.o log* server_client_fifo client_server_fifo
+	rm -rf argus argusd *.o log* server_client_fifo client_server_fifo

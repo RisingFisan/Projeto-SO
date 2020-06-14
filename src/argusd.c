@@ -16,12 +16,12 @@
 
 #define BUFSIZE 4096
 
-char* processes[1024];
-int exitStatus[1024];
-int execTimes[1024];
-char commTimes[1024];
-int pids[1024][32];
-int numPids[1024];
+char* processes[2048];
+int exitStatus[2048];
+int execTimes[2048];
+char commTimes[2048];
+int pids[2048][32];
+int numPids[2048];
 int lastProcess = 0;
 int tExec = -1;
 int tInac = -1;
@@ -32,18 +32,20 @@ void terminate(int procNum);
 
 void sigchld_handler(int sig) {
     int status;
-    pid_t pid = wait(&status);
-    for(size_t i = 0; i < lastProcess; i++) {
-        if(pids[i][numPids[i] - 1] == pid) {
-            if(!WIFSIGNALED(status) && exitStatus[i] == EXECUTING) {
-                int log = open("log", O_RDONLY);
-                int logidx = open("log.idx", O_WRONLY | O_APPEND);
-                exitStatus[i] = FINISHED;
-                off_t end = lseek(log, 0, SEEK_END);
-                char message[64];
-                sprintf(message, "%020zu,%020ld;", i+1, end);
-                write(logidx, message, strlen(message));
-                break;
+    pid_t pid;
+    while((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        for(size_t i = 0; i < lastProcess; i++) {
+            if(pids[i][numPids[i] - 1] == pid) {
+                if(!WIFSIGNALED(status) && exitStatus[i] == EXECUTING) {
+                    int log = open("log", O_RDONLY);
+                    int logidx = open("log.idx", O_WRONLY | O_APPEND);
+                    exitStatus[i] = FINISHED;
+                    off_t end = lseek(log, 0, SEEK_END);
+                    char message[64];
+                    sprintf(message, "%020zu,%020ld;", i+1, end);
+                    write(logidx, message, strlen(message));
+                    break;
+                }
             }
         }
     }
@@ -179,7 +181,7 @@ int main(int argc, char const *argv[]) {
             numPids[lastProcess] = currPipe + 1;
 
             lastProcess++;
-            free(command);
+            //free(command);
         }
         else if(strncmp(buffer, "terminar", 8) == 0) {
             long num = strtol(buffer + 9, NULL, 10);
