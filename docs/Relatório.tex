@@ -117,10 +117,12 @@
 	Decidimos que o nosso servidor suporta a execução de até 2048 tarefas. Podíamos ter usado alocação dinâmica de memória para suportar a execução de mais tarefas, mas sentimos que não seria necessário, já que, tendo em conta a simplicidade do programa, seria quase inconcebível executar mais que algumas centenas de tarefas, o histórico seria demasiado grande. Num projeto de mais larga escala, com um histórico navegável por páginas, por exemplo, isso já seria algo que implementaríamos.
 	
 	Para além disso, cada comando enviado ao servidor pode conter até 4098 caracteres. Contudo, este valor pode ser facilmente alterado no ficheiro \emph{argus.h}.
+	
+	Os FIFOs são criados pelo servidor, por isso o servidor deve ser iniciado antes de algum cliente. Também podíamos ter dado ao cliente a funcionalidade de criar FIFOs, caso estes não existissem, mas achámos que fazia mais sentido ser o servidor a gerir tudo, para além de que é suposto o servidor estar constantemente a correr, logo isto nunca seria um problema.
 
 	\chapter{Conclusão}
 	
-	Como é possível constatar, o nosso trabalho possui todas as funcionalidades pedidas a funcionar perfeitamente, para além da funcionalidade adicional. Desta forma, acreditamos que o nosso trabalho está bem conseguido. Tal como referimos no capítulo anterior, podíamos ter feito algumas coisas de forma diferente, mas da forma que fizemos funciona tudo bem.
+	Como é possível constatar, o nosso trabalho possui todas as funcionalidades pedidas a funcionar perfeitamente, para além da funcionalidade adicional. Desta forma, acreditamos que o nosso trabalho está bem conseguido. Tal como referimos no capítulo anterior, podíamos ter feito algumas coisas de forma diferente, mas da forma que fizemos funciona tudo bem. Este trabalho permitiu-nos consolidar tudo o que fomos aprendendo na cadeira de Sistemas Operativos de uma forma prática e interessante.
 
 
 \end{document}

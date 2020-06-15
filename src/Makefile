@@ -14,3 +14,4 @@ argusd: argusd.o
 
 clean:
 	rm -rf argus argusd *.o log* server_client_fifo client_server_fifo
+	pkill argus
