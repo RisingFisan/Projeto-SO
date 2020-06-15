@@ -8,14 +8,7 @@
 #include <stdio.h>
 #include <signal.h>
 
-#define FINISHED 0
-#define EXECUTING 1
-#define TERMINATED 2
-#define TERMINACTIVE 3
-#define TERMTEXEC 4
-#define ERROR 255
-
-#define BUFSIZE 4096
+#include "argus.h"
 
 char* processes[2048];
 int exitStatus[2048];
@@ -26,10 +19,6 @@ int numPids[2048];
 int lastProcess = 0;
 int tExec = -1;
 int tInac = -1;
-
-void strcpyandtrim(char* dest, char* src);
-
-void terminate(int procNum);
 
 void sigchld_handler(int sig) {
     int status;
@@ -103,10 +92,10 @@ int main(int argc, char const *argv[]) {
     alarm(1);
 
     while(1) {
-        char* buffer = calloc(BUFSIZE, sizeof(char));
+        char* buffer = calloc(MESSAGESIZE, sizeof(char));
         int client_server_fifo = open("client_server_fifo", O_RDONLY);
         int server_client_fifo = open("server_client_fifo", O_WRONLY);
-        size_t bytesRead = read(client_server_fifo, buffer, BUFSIZE);
+        size_t bytesRead = read(client_server_fifo, buffer, MESSAGESIZE);
 
         if(strncmp(buffer, "ajuda", 5) == 0) {
             char helpMessage[] = "\nCOMANDOS DISPONÍVEIS (modo linha de comando entre parênteses)\n\n"
@@ -129,7 +118,7 @@ int main(int argc, char const *argv[]) {
             write(server_client_fifo, helpMessage, strlen(helpMessage));
         }
         else if(strncmp(buffer, "executar", 8) == 0) {
-            char command[BUFSIZE];
+            char command[MESSAGESIZE];
             strcpyandtrim(command, buffer + 9);
 
             processes[lastProcess] = strdup(command);
@@ -174,6 +163,7 @@ int main(int argc, char const *argv[]) {
                     }
                     else {
                         pids[lastProcess][currPipe] = pid;
+                        for(size_t j = 0; j < i; j++) free(args[j]);
                         i = 0;
                     }
                     close(pipes[currPipe][1]);
@@ -201,6 +191,8 @@ int main(int argc, char const *argv[]) {
             numPids[lastProcess] = currPipe + 1;
 
             lastProcess++;
+
+            for(size_t j = 0; j < i; j++) free(args[j]);
         }
         else if(strncmp(buffer, "terminar", 8) == 0) {
             long num = strtol(buffer + 9, NULL, 10);
@@ -219,9 +211,12 @@ int main(int argc, char const *argv[]) {
             }
             else write(server_client_fifo, "\nInput inválido.\n\n", 19);
         }
-        else if(strncmp(buffer, "exit", 4) == 0) {
+        /*
+        else if(strncmp(buffer, "sair", 4) == 0) {
+            free(buffer);
             break;
         }
+        */
         else if(strncmp(buffer, "tempo-execucao", 14) == 0) {
             long time = strtol(buffer + 15, NULL, 10);
             if(time > 0) {
@@ -339,23 +334,33 @@ int main(int argc, char const *argv[]) {
                     write(server_client_fifo, buf, strlen(buf));  
                 }
             }
-            else write(server_client_fifo, "\nInput inválido.\n\n", 19);
+            else {
+                strcpy(buf, "\nInput inválido.\n\n");
+                write(server_client_fifo, buf, strlen(buf));  
+            }
         }
-
+        else {
+            char buf[32];
+            strcpy(buf, "\nComando inválido.\n\n");
+            write(server_client_fifo, buf, strlen(buf));  
+        }
         free(buffer);
         close(server_client_fifo);
         close(client_server_fifo);
     }
+    for(size_t i = 0; i < lastProcess; i++)
+        free(processes[i]);
     return 0;
 }
 
 void strcpyandtrim(char* dest, char* src) {
     char* start = src;
     while(*start == ' ') start++;
-    start++;
+    char quoteType = *start;
+    while(*start == quoteType) start++;
     strcpy(dest, start);
-    while(dest[strlen(dest) - 1] != '"') dest[strlen(dest) - 1] = '\0';
-    dest[strlen(dest) - 1] = '\0';
+    int lastIndex = strlen(dest) - 1;
+    while(dest[lastIndex] == quoteType || dest[lastIndex] == ' ') dest[lastIndex--] = '\0';
 }
 
 void terminate(int procNum) {

@@ -3,13 +3,14 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "argus.h"
+
 int main(int argc, char const *argv[]) {
-    char string[1024];
+    char string[MESSAGESIZE];
 
     if(argc < 2) {
-        char string[1024];
         int bytesRead = 0;
-        while((bytesRead = read(STDIN_FILENO, string, 1024)) > 0) {
+        while((bytesRead = read(STDIN_FILENO, string, MESSAGESIZE)) > 0) {
             if(string[bytesRead - 1] == '\n') string[--bytesRead] = 0;
 
             int client_server_fifo = open("client_server_fifo", O_WRONLY);
@@ -17,7 +18,7 @@ int main(int argc, char const *argv[]) {
             write(client_server_fifo, string, bytesRead);
             close(client_server_fifo);
 
-            while((bytesRead = read(server_client_fifo, string, 1024)) > 0)
+            while((bytesRead = read(server_client_fifo, string, MESSAGESIZE)) > 0)
                 write(STDOUT_FILENO, string, bytesRead);
             close(server_client_fifo);
         }
