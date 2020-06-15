@@ -1,4 +1,4 @@
-#define MESSAGESIZE 2048
+#define MESSAGESIZE 4096
 
 #define FINISHED 0
 #define EXECUTING 1
@@ -6,7 +6,3 @@
 #define TERMINACTIVE 3
 #define TERMTEXEC 4
 #define ERROR 255
-
-void strcpyandtrim(char* dest, char* src);
-
-void terminate(int procNum);

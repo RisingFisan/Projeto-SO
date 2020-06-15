@@ -73,11 +73,11 @@
 	Este comando permite-nos definir um tempo máximo durante o qual cada tarefa pode correr antes de ser terminada à força. O programa guarda numa lista o tempo de execução de cada tarefa, e a cada segundo verifica, caso a tarefa ainda esteja em execução, se esse tempo é superior ao tempo máximo de execução. Em caso afirmativo, essa tarefa é terminado pelo mesmo método do comando \emph{terminar} e o seu estado atualizado. Caso não seja, o tempo de execução dessa tarefa é incrementado em um segundo. Esta sistema funciona usando a função \emph{alarm}, que é chamada uma vez por segundo, e faz essa verificação.
 	
 	\section{Tempo de inatividade}
-	Ao dar a flag \emph{O\_ASYNC} aos pipes de comunicação das tarefas, estes enviam um sinal (\emph{SIGIO}) quando passa informação por eles. Desta forma, somos capazes de saber quando é que houve comunicação num pipe anónimo. Este comando usa o mesmo método de medição de tempo que o comando \emph{tempo-execucao}, mas este apenas interrompe uma tarefa se não tiver havido comunicação nos pipes dessa tarefa. O comando sabe isso através de uma variável que passa a ser zero sempre que há comunicação num dos pipes da tarefa, e que é incrementada a cada segundo. Desta forma, se chegar ao valor do tempo de inatividade, é porque não houve atividade durante aquele tempo.
+	Ao dar a flag \emph{O\_ASYNC} aos pipes de comunicação das tarefas, estes enviam um sinal (\emph{SIGIO}) quando passa informação por eles. Desta forma, somos capazes de saber quando é que houve comunicação num pipe anónimo. Este comando usa o mesmo método de medição de tempo que o comando \emph{tempo-execucao}, mas este apenas interrompe uma tarefa se não tiver havido comunicação nos pipes dessa tarefa. O comando sabe isso através de uma variável que passa a ser zero sempre que há comunicação num dos pipes da tarefa, e que é incrementada a cada segundo. Desta forma, se chegar ao valor do tempo de inatividade, é porque não houve atividade durante aquele tempo. Como é necessário saber a que tarefa pertence o pipe que enviou o sinal, os sinais são enviados para um processo filho "monitor". Cada tarefa tem um monitor, que, se receber o sinal SIGIO, envia outro sinal para o processo argusd, que consegue detetar qual o monitor que enviou o sinal e terminar a respetiva tarefa. Estes monitores são terminados sempre que uma tarefa termina, seja naturalmente ou não.
 		
 	\chapter{Testes}
 	
-	Apresentamos agora alguns dos testes manuais que fizemos para testar o funcionamento do nosso programa. Para além destes fizemos mais testes e testes mais complexos, mas estes cobrem todas as funcionalidades principais do programa.
+	Apresentamos agora alguns dos testes manuais que fizemos para testar o funcionamento do nosso programa. Para além destes fizemos mais testes e testes mais complexos, mas estes cobrem todas as funcionalidades principais do programa. Nas imagens abaixo, se não houver indicação em contrário, os comandos foram executados sequencialmente, um imediatamente após o outro.
 	
 	\begin{figure}[H]
 		\centering
@@ -101,13 +101,22 @@
 		\end{subfigure}
 	\end{figure}
 		
+	\pagebreak
+	Para testar o comando \emph{tempo-inactividade} fizemos um pequeno programa em \emph{Python} que recebe input pela linha de comandos ou pelo stdin e o envia como output passados X segundos (10 por defeito). Desta forma, ao encadear 3 invocações deste programa, por exemplo, temos uma tarefa que demora 30 segundos a executar, mas cujos pipes apenas estão inativos por períodos de 10 segundos. No exemplo abaixo, a mesma tarefa apenas é terminada quando o tempo de inatividade é inferior a 10 segundos.
+	\begin{figure}[H]
+		\centering
+		\includegraphics[width=.9\linewidth]{teste4.png}
+		\caption{Teste 'tempo-inactividade'.}
+		\label{fig:test4}
+	\end{figure}
+		
 	\chapter{Decisões tomadas}
 	
 	O nosso ficheiro de log, onde são armazenados os outputs das tarefas, é apagado sempre que o servidor é reiniciado. Decidimos fazer desta forma, mas seria muito simples fazer de outra forma, apenas fizemos assim por escolha e porque o enunciado não referia que método tínhamos que usar. Desta forma, cada execução do servidor irá produzir um novo ficheiro de log.
 	
 	Decidimos que o nosso servidor suporta a execução de até 2048 tarefas. Podíamos ter usado alocação dinâmica de memória para suportar a execução de mais tarefas, mas sentimos que não seria necessário, já que, tendo em conta a simplicidade do programa, seria quase inconcebível executar mais que algumas centenas de tarefas, o histórico seria demasiado grande. Num projeto de mais larga escala, com um histórico navegável por páginas, por exemplo, isso já seria algo que implementaríamos.
 	
-	Para além disso, cada comando enviado ao servidor pode conter até 2048 caracteres.
+	Para além disso, cada comando enviado ao servidor pode conter até 4098 caracteres. Contudo, este valor pode ser facilmente alterado no ficheiro \emph{argus.h}.
 
 	\chapter{Conclusão}
 	

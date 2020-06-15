@@ -14,11 +14,15 @@ char* processes[2048];
 int exitStatus[2048];
 int execTimes[2048];
 char commTimes[2048];
+int monitors[2048];
 int pids[2048][32];
 int numPids[2048];
 int lastProcess = 0;
 int tExec = -1;
 int tInac = -1;
+
+void strcpyandtrim(char* dest, char* src);
+void terminate(int procNum);
 
 void sigchld_handler(int sig) {
     int status;
@@ -37,6 +41,7 @@ void sigchld_handler(int sig) {
                     int log = open("log", O_RDONLY);
                     int logidx = open("log.idx", O_WRONLY | O_APPEND);
                     exitStatus[i] = FINISHED;
+                    kill(monitors[i], SIGTERM);
                     off_t end = lseek(log, 0, SEEK_END);
                     char message[64];
                     sprintf(message, "%020zu,%020ld;", i+1, end);
@@ -66,16 +71,17 @@ void sigalrm_handler(int sig) {
     alarm(1);
 }
 
-void sigio_handler(int sig) {
-    int pid = getpid();
-    for(size_t i = 0; i < lastProcess; i++) {
-        for(size_t j = 0; j < numPids[i] - 1; j++) {
-            if(pid == pids[i][j]) {
-                commTimes[i] = 0;
-                return;
-            }
+void sigusr1_handler(int sig, siginfo_t * siginfo, void * c) {
+    int monitorpid = siginfo->si_pid;
+    for(int i = 0; i <= lastProcess; i++) {
+        if(monitors[i] == monitorpid) {
+            commTimes[i] = 0;
         }
     }
+}
+
+void sigio_handler(int sig) {
+    kill(getppid(), SIGUSR1);
 }
 
 int main(int argc, char const *argv[]) {
@@ -86,6 +92,11 @@ int main(int argc, char const *argv[]) {
     signal(SIGALRM, sigalrm_handler);
     signal(SIGIO, sigio_handler);
 
+    struct sigaction * psa = calloc(1, sizeof(struct sigaction));
+    psa->sa_sigaction = sigusr1_handler;
+    psa->sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIGUSR1, psa, NULL);
+
     int log = open("log", O_RDWR | O_CREAT | O_TRUNC, 0644);
     int logidx = open("log.idx", O_RDWR | O_CREAT | O_TRUNC, 0644);
 
@@ -95,7 +106,7 @@ int main(int argc, char const *argv[]) {
         char* buffer = calloc(MESSAGESIZE, sizeof(char));
         int client_server_fifo = open("client_server_fifo", O_RDONLY);
         int server_client_fifo = open("server_client_fifo", O_WRONLY);
-        size_t bytesRead = read(client_server_fifo, buffer, MESSAGESIZE);
+        read(client_server_fifo, buffer, MESSAGESIZE);
 
         if(strncmp(buffer, "ajuda", 5) == 0) {
             char helpMessage[] = "\nCOMANDOS DISPONÍVEIS (modo linha de comando entre parênteses)\n\n"
@@ -138,6 +149,10 @@ int main(int argc, char const *argv[]) {
             int i = 0;
             char* rest = command;
 
+            if((monitors[lastProcess] = fork()) == 0) {
+                monitors[lastProcess] = getpid();
+                while(1);
+            }
             while((token = strtok_r(rest, " ", &rest))) {
                 if(i == 0) {
                     args[0] = strdup(token);
@@ -146,7 +161,7 @@ int main(int argc, char const *argv[]) {
 
                 if(*token == '|') {
                     pipe(pipes[currPipe]);
-                    fcntl(pipes[currPipe][0], __F_SETOWN, getpid());
+                    fcntl(pipes[currPipe][0], __F_SETOWN, monitors[lastProcess]);
                     fcntl(pipes[currPipe][0], F_SETFL, O_ASYNC | O_RDONLY);
 
                     args[i] = NULL;
@@ -366,4 +381,5 @@ void strcpyandtrim(char* dest, char* src) {
 void terminate(int procNum) {
     for(size_t i = 0; i < numPids[procNum]; i++)
         kill(pids[procNum][i], SIGTERM);
+    kill(monitors[procNum], SIGTERM);
 }
